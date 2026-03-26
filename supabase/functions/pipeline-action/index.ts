@@ -343,6 +343,14 @@ Deno.serve(async (req) => {
         }
 
         if (stage_code === 3) {
+          // Pipeline needs intermediate steps: proposta_aceita → agendamento_pendente → agendado
+          const { data: evalPipe } = await supabase.from("evaluations").select("pipeline_status").eq("id", evaluation_id).single();
+          if (evalPipe?.pipeline_status === "proposta_aceita") {
+            await supabase.rpc("transition_pipeline_safe", {
+              p_evaluation_id: evaluation_id, p_new_status: "agendamento_pendente",
+              p_changed_by: userChangedBy, p_origin: "automatico",
+            });
+          }
           await supabase.rpc("transition_pipeline_safe", {
             p_evaluation_id: evaluation_id, p_new_status: "agendado",
             p_changed_by: userChangedBy, p_origin: "automatico",
@@ -388,10 +396,14 @@ Deno.serve(async (req) => {
           .eq("evaluation_id", evaluation_id).eq("stage_code", rsc).eq("status", "agendado");
 
         if (rsc === 3 || rsc === 4) {
-          await supabase.rpc("transition_pipeline_safe", {
-            p_evaluation_id: evaluation_id, p_new_status: "em_realizacao",
-            p_changed_by: userChangedBy, p_origin: "automatico",
-          });
+          // Pipeline: agendado → em_realizacao
+          const { data: evalPipe } = await supabase.from("evaluations").select("pipeline_status").eq("id", evaluation_id).single();
+          if (evalPipe?.pipeline_status === "agendado") {
+            await supabase.rpc("transition_pipeline_safe", {
+              p_evaluation_id: evaluation_id, p_new_status: "em_realizacao",
+              p_changed_by: userChangedBy, p_origin: "automatico",
+            });
+          }
         }
 
         result = { success: true, action: "realize" };
@@ -426,12 +438,17 @@ Deno.serve(async (req) => {
         });
         if (!stageRes.data?.success) return json({ success: false, error: stageRes.data?.error }, 400);
 
-        // Auto pipeline transitions
+        // Auto pipeline transitions - walk through required intermediate steps
         if (csc === 5) {
-          await supabase.rpc("transition_pipeline_safe", {
-            p_evaluation_id: evaluation_id, p_new_status: "em_analise",
-            p_changed_by: userChangedBy, p_origin: "automatico",
-          });
+          const { data: evalPipe } = await supabase.from("evaluations").select("pipeline_status").eq("id", evaluation_id).single();
+          const ps = evalPipe?.pipeline_status;
+          // Walk pipeline: em_realizacao → em_analise
+          if (ps === "em_realizacao") {
+            await supabase.rpc("transition_pipeline_safe", {
+              p_evaluation_id: evaluation_id, p_new_status: "em_analise",
+              p_changed_by: userChangedBy, p_origin: "automatico",
+            });
+          }
         } else if (csc === 7) {
           // Auto-complete stage 8
           await supabase.rpc("transition_stage_safe", {
@@ -439,10 +456,15 @@ Deno.serve(async (req) => {
             p_new_status: "concluida", p_changed_by: "sistema",
             p_notes: "Finalizado automaticamente após atualização do PGR", p_origin: "automatico",
           });
-          await supabase.rpc("transition_pipeline_safe", {
-            p_evaluation_id: evaluation_id, p_new_status: "finalizado",
-            p_changed_by: userChangedBy, p_origin: "automatico",
-          });
+          // Walk pipeline to finalizado
+          const { data: evalPipe } = await supabase.from("evaluations").select("pipeline_status").eq("id", evaluation_id).single();
+          const ps = evalPipe?.pipeline_status;
+          if (ps === "em_analise") {
+            await supabase.rpc("transition_pipeline_safe", {
+              p_evaluation_id: evaluation_id, p_new_status: "finalizado",
+              p_changed_by: userChangedBy, p_origin: "automatico",
+            });
+          }
         }
 
         result = { success: true, action: "complete" };
