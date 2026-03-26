@@ -67,8 +67,8 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(newSession?.user ?? null);
 
         if (newSession?.user) {
-          // Defer data fetch to avoid deadlocks
-          setTimeout(() => fetchUserData(newSession.user.id), 0);
+          // Fetch user data BEFORE setting loading to false
+          await fetchUserData(newSession.user.id);
         } else {
           setRoles([]);
           setProfile(null);
@@ -78,11 +78,11 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
     );
 
     // THEN check existing session
-    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
+    supabase.auth.getSession().then(async ({ data: { session: existingSession } }) => {
       setSession(existingSession);
       setUser(existingSession?.user ?? null);
       if (existingSession?.user) {
-        fetchUserData(existingSession.user.id);
+        await fetchUserData(existingSession.user.id);
       }
       setIsLoading(false);
     });
