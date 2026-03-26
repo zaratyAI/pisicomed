@@ -224,59 +224,91 @@ const AdminDashboardPage = () => {
   };
 
   // ─── PDF ───
-  const handleDownloadPDF = (ev: any) => {
+  const handleDownloadPDF = async (ev: any) => {
     const company = ev.companies;
     const evaluator = ev.evaluators;
     if (!company) return;
 
-    supabase
+    let { data: actions } = await supabase
       .from("action_plans")
       .select("*")
-      .eq("evaluation_id", ev.id)
-      .then(({ data: actions }) => {
-        const actionItems = (actions || []).map((a: any) => ({
-          questionCode: a.question_code,
-          questionTitle: a.question_title,
-          answer: a.answer,
-          actionText: a.action_text,
-          classification: a.classification,
-          priority: a.priority,
-          theme: a.theme,
-          block: a.block,
-        }));
+      .eq("evaluation_id", ev.id);
 
-        const companyData = {
-          cnpj: formatCNPJ(company.cnpj),
-          legalName: company.legal_name,
-          tradeName: company.trade_name || "",
-          address: company.address || "",
-          city: company.city || "",
-          state: company.state || "",
-          zipCode: company.zip_code || "",
-          status: company.status || "",
-        };
+    // Auto-generate action plans if missing (e.g. incomplete evaluation)
+    if (!actions || actions.length === 0) {
+      const { data: answers } = await supabase
+        .from("answers")
+        .select("question_code, answer")
+        .eq("evaluation_id", ev.id);
 
-        const evaluatorData = evaluator
-          ? {
-              name: evaluator.name,
-              cpf: evaluator.cpf,
-              email: evaluator.email,
-              roleTitle: evaluator.role_title,
-            }
-          : undefined;
+      if (answers && answers.length > 0) {
+        const { questions } = await import("@/data/questions");
+        const { generateActionPlan } = await import("@/utils/actionPlan");
+        const answersMap: Record<string, { answer: string }> = {};
+        answers.forEach((a: any) => { answersMap[a.question_code] = { answer: a.answer }; });
+        const generated = generateActionPlan(questions, answersMap);
 
-        const date = ev.finished_at
-          ? new Date(ev.finished_at).toLocaleDateString("pt-BR", {
-              day: "2-digit",
-              month: "2-digit",
-              year: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-          : "";
+        if (generated.length > 0) {
+          const items = generated.map((a) => ({
+            evaluation_id: ev.id,
+            question_code: a.questionCode,
+            question_title: a.questionTitle,
+            answer: a.answer,
+            action_text: a.actionText,
+            classification: a.classification,
+            priority: a.priority,
+            theme: a.theme,
+            block: a.block,
+          }));
+          await supabase.from("action_plans").insert(items);
+          await supabase.from("evaluations").update({ total_actions: generated.length }).eq("id", ev.id);
+          actions = items;
+        }
+      }
+    }
 
-        exportActionPlanPDF(companyData, actionItems, date, evaluatorData);
-      });
+    const actionItems = (actions || []).map((a: any) => ({
+      questionCode: a.question_code,
+      questionTitle: a.question_title,
+      answer: a.answer,
+      actionText: a.action_text,
+      classification: a.classification,
+      priority: a.priority,
+      theme: a.theme,
+      block: a.block,
+    }));
+
+    const companyData = {
+      cnpj: formatCNPJ(company.cnpj),
+      legalName: company.legal_name,
+      tradeName: company.trade_name || "",
+      address: company.address || "",
+      city: company.city || "",
+      state: company.state || "",
+      zipCode: company.zip_code || "",
+      status: company.status || "",
+    };
+
+    const evaluatorData = evaluator
+      ? {
+          name: evaluator.name,
+          cpf: evaluator.cpf,
+          email: evaluator.email,
+          roleTitle: evaluator.role_title,
+        }
+      : undefined;
+
+    const date = ev.finished_at
+      ? new Date(ev.finished_at).toLocaleDateString("pt-BR", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "";
+
+    exportActionPlanPDF(companyData, actionItems, date, evaluatorData);
   };
 
   if (loading) {
