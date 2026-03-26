@@ -60,34 +60,46 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
+      (event, newSession) => {
+        if (!isMounted) return;
         setSession(newSession);
         setUser(newSession?.user ?? null);
 
         if (newSession?.user) {
-          // Fetch user data BEFORE setting loading to false
-          await fetchUserData(newSession.user.id);
+          // Defer to avoid Supabase auth deadlock, but track completion
+          fetchUserData(newSession.user.id).finally(() => {
+            if (isMounted) setIsLoading(false);
+          });
         } else {
           setRoles([]);
           setProfile(null);
+          setIsLoading(false);
         }
-        setIsLoading(false);
       }
     );
 
     // THEN check existing session
-    supabase.auth.getSession().then(async ({ data: { session: existingSession } }) => {
+    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
+      if (!isMounted) return;
       setSession(existingSession);
       setUser(existingSession?.user ?? null);
       if (existingSession?.user) {
-        await fetchUserData(existingSession.user.id);
+        fetchUserData(existingSession.user.id).finally(() => {
+          if (isMounted) setIsLoading(false);
+        });
+      } else {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, [fetchUserData]);
 
   const login = useCallback(async (email: string, password: string) => {
