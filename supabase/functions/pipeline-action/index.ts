@@ -76,16 +76,33 @@ Deno.serve(async (req) => {
           return json({ success: false, error: "Link da proposta deve ser uma URL válida" }, 400);
         }
 
-        // Check quote exists
-        const { data: quote } = await supabase
+        // Get or auto-create quote_request (allows admin to advance without client action)
+        let { data: quote } = await supabase
           .from("quote_requests")
           .select("id")
           .eq("evaluation_id", evaluation_id)
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
+
         if (!quote) {
-          return json({ success: false, error: "Nenhuma solicitação de orçamento encontrada" }, 400);
+          // Auto-create quote_request from evaluation data
+          const { data: evalInfo } = await supabase
+            .from("evaluations")
+            .select("company_id, evaluator_id, evaluators(name, email, cpf, role_title)")
+            .eq("id", evaluation_id)
+            .single();
+          const ev = (evalInfo as any)?.evaluators;
+          const { data: newQuote } = await supabase.from("quote_requests").insert({
+            company_id: evalInfo?.company_id,
+            evaluation_id,
+            requester_name: ev?.name || userChangedBy,
+            requester_role: ev?.role_title || "",
+            requester_cpf: ev?.cpf || "",
+            requester_email: ev?.email || "",
+            status: "requested",
+          }).select("id").single();
+          quote = newQuote;
         }
 
         // Update quote
@@ -143,8 +160,8 @@ Deno.serve(async (req) => {
       }
 
       case "proposal_accepted": {
-        // Check quote
-        const { data: quote } = await supabase
+        // Get or auto-create quote_request
+        let { data: quote } = await supabase
           .from("quote_requests")
           .select("id, proposal_link, proposal_status")
           .eq("evaluation_id", evaluation_id)
@@ -152,15 +169,33 @@ Deno.serve(async (req) => {
           .limit(1)
           .maybeSingle();
 
-        if (!quote) return json({ success: false, error: "Nenhuma solicitação de orçamento encontrada" }, 400);
-        if (!quote.proposal_link) return json({ success: false, error: "Proposta precisa ser enviada primeiro" }, 400);
-        if (quote.proposal_status === "approved") return json({ success: false, error: "Proposta já foi aceita" }, 400);
+        if (!quote) {
+          // Auto-create for admin-driven flow (contract already signed)
+          const { data: evalInfo } = await supabase
+            .from("evaluations")
+            .select("company_id, evaluator_id, evaluators(name, email, cpf, role_title)")
+            .eq("id", evaluation_id)
+            .single();
+          const ev = (evalInfo as any)?.evaluators;
+          await supabase.from("quote_requests").insert({
+            company_id: evalInfo?.company_id,
+            evaluation_id,
+            requester_name: ev?.name || userChangedBy,
+            requester_role: ev?.role_title || "",
+            requester_cpf: ev?.cpf || "",
+            requester_email: ev?.email || "",
+            status: "proposal_accepted",
+            proposal_status: "approved",
+            proposal_link: notes || "Contrato assinado diretamente",
+          });
+        } else {
+          if (quote.proposal_status === "approved") return json({ success: false, error: "Proposta já foi aceita" }, 400);
+          await supabase.from("quote_requests").update({
+            status: "proposal_accepted", proposal_status: "approved",
+          }).eq("evaluation_id", evaluation_id);
+        }
 
-        await supabase.from("quote_requests").update({
-          status: "proposal_accepted", proposal_status: "approved",
-        }).eq("evaluation_id", evaluation_id);
-
-        // Two-step stage transition: proposta_enviada → proposta_aceita → concluida
+        // Walk stage 2 to concluida (handling any current state)
         const { data: currentStage } = await supabase
           .from("journey_stages")
           .select("status")
@@ -170,29 +205,63 @@ Deno.serve(async (req) => {
 
         const stageStatus = currentStage?.status;
 
-        if (stageStatus === "proposta_enviada") {
-          const midStage = await supabase.rpc("transition_stage_safe", {
+        // Walk through valid transitions to reach concluida
+        if (stageStatus === "pendente" || stageStatus === "disponivel") {
+          await supabase.rpc("transition_stage_safe", {
+            p_evaluation_id: evaluation_id, p_stage_code: 2,
+            p_new_status: "concluida", p_changed_by: userChangedBy,
+            p_notes: notes || "Proposta aceita (contrato assinado)", p_origin: "manual",
+          });
+        } else if (stageStatus === "aguardando_proposta") {
+          await supabase.rpc("transition_stage_safe", {
+            p_evaluation_id: evaluation_id, p_stage_code: 2,
+            p_new_status: "proposta_enviada", p_changed_by: userChangedBy,
+            p_notes: "Transição automática", p_origin: "automatico",
+          });
+          await supabase.rpc("transition_stage_safe", {
             p_evaluation_id: evaluation_id, p_stage_code: 2,
             p_new_status: "proposta_aceita", p_changed_by: userChangedBy,
             p_notes: notes || "Proposta aceita pelo cliente", p_origin: "manual",
           });
-          if (!midStage.data?.success) return json({ success: false, error: midStage.data?.error }, 400);
-        }
-
-        if (stageStatus !== "concluida") {
-          const stageRes = await supabase.rpc("transition_stage_safe", {
+          await supabase.rpc("transition_stage_safe", {
             p_evaluation_id: evaluation_id, p_stage_code: 2,
             p_new_status: "concluida", p_changed_by: userChangedBy,
-            p_notes: notes || "Etapa de proposta concluída", p_origin: "manual",
+            p_notes: "Etapa de proposta concluída", p_origin: "automatico",
           });
-          if (!stageRes.data?.success) return json({ success: false, error: stageRes.data?.error }, 400);
+        } else if (stageStatus === "proposta_enviada") {
+          await supabase.rpc("transition_stage_safe", {
+            p_evaluation_id: evaluation_id, p_stage_code: 2,
+            p_new_status: "proposta_aceita", p_changed_by: userChangedBy,
+            p_notes: notes || "Proposta aceita pelo cliente", p_origin: "manual",
+          });
+          await supabase.rpc("transition_stage_safe", {
+            p_evaluation_id: evaluation_id, p_stage_code: 2,
+            p_new_status: "concluida", p_changed_by: userChangedBy,
+            p_notes: "Etapa de proposta concluída", p_origin: "automatico",
+          });
+        } else if (stageStatus === "proposta_aceita") {
+          await supabase.rpc("transition_stage_safe", {
+            p_evaluation_id: evaluation_id, p_stage_code: 2,
+            p_new_status: "concluida", p_changed_by: userChangedBy,
+            p_notes: "Etapa de proposta concluída", p_origin: "automatico",
+          });
         }
+        // If already concluida, skip
 
-        const pipeRes = await supabase.rpc("transition_pipeline_safe", {
-          p_evaluation_id: evaluation_id, p_new_status: "proposta_aceita",
-          p_changed_by: userChangedBy, p_origin: "automatico",
-        });
-        if (!pipeRes.data?.success) return json({ success: false, error: pipeRes.data?.error }, 400);
+        // Walk pipeline to proposta_aceita
+        const { data: evalPipe } = await supabase.from("evaluations").select("pipeline_status").eq("id", evaluation_id).single();
+        const ps = evalPipe?.pipeline_status;
+        if (ps === "avaliacao_inicial") {
+          await supabase.rpc("transition_pipeline_safe", { p_evaluation_id: evaluation_id, p_new_status: "proposta_solicitada", p_changed_by: userChangedBy, p_origin: "automatico" });
+          await supabase.rpc("transition_pipeline_safe", { p_evaluation_id: evaluation_id, p_new_status: "proposta_enviada", p_changed_by: userChangedBy, p_origin: "automatico" });
+          await supabase.rpc("transition_pipeline_safe", { p_evaluation_id: evaluation_id, p_new_status: "proposta_aceita", p_changed_by: userChangedBy, p_origin: "automatico" });
+        } else if (ps === "proposta_solicitada") {
+          await supabase.rpc("transition_pipeline_safe", { p_evaluation_id: evaluation_id, p_new_status: "proposta_enviada", p_changed_by: userChangedBy, p_origin: "automatico" });
+          await supabase.rpc("transition_pipeline_safe", { p_evaluation_id: evaluation_id, p_new_status: "proposta_aceita", p_changed_by: userChangedBy, p_origin: "automatico" });
+        } else if (ps === "proposta_enviada") {
+          await supabase.rpc("transition_pipeline_safe", { p_evaluation_id: evaluation_id, p_new_status: "proposta_aceita", p_changed_by: userChangedBy, p_origin: "automatico" });
+        }
+        // If already proposta_aceita or beyond, skip
 
         result = { success: true, action: "proposal_accepted" };
         break;
