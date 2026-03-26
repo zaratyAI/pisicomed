@@ -1,0 +1,1 @@
+ALTER TABLE public.quote_requests ADD COLUMN proposal_link text DEFAULT NULL;

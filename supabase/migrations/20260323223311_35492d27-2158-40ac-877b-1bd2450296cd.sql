@@ -1,0 +1,1 @@
+ALTER TABLE public.stage_audit_logs ADD COLUMN origin text NOT NULL DEFAULT 'manual';
