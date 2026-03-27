@@ -38,6 +38,9 @@ const AdminDashboardPage = () => {
   const [journeyMap, setJourneyMap] = useState<Record<string, StageData[]>>({});
   const [quoteMap, setQuoteMap] = useState<Record<string, any>>({});
   const [scheduleDate, setScheduleDate] = useState<Record<string, string>>({});
+  const [scheduleTime, setScheduleTime] = useState<Record<string, string>>({});
+  const [contactName, setContactName] = useState<Record<string, string>>({});
+  const [contactPhone, setContactPhone] = useState<Record<string, string>>({});
   const [proposalLinks, setProposalLinks] = useState<Record<string, string>>({});
   const [filters, setFilters] = useState<FilterState>({
     search: "",
@@ -79,7 +82,7 @@ const AdminDashboardPage = () => {
 
       const evalIds = result.data.map((ev: any) => ev.id);
       if (evalIds.length > 0) {
-        const [{ data: stages }, { data: quotes }] = await Promise.all([
+        const [{ data: stages }, { data: quotes }, { data: appointments }] = await Promise.all([
           supabase
             .from("journey_stages")
             .select("*")
@@ -90,17 +93,37 @@ const AdminDashboardPage = () => {
             .select("*")
             .in("evaluation_id", evalIds)
             .order("created_at", { ascending: false }),
+          supabase
+            .from("appointments")
+            .select("*")
+            .in("evaluation_id", evalIds)
+            .eq("status", "agendado")
+            .order("created_at", { ascending: false }),
         ]);
+
+        // Index appointments by eval+stage
+        const apptMap: Record<string, any> = {};
+        (appointments || []).forEach((a: any) => {
+          const key = `${a.evaluation_id}_${a.stage_code}`;
+          if (!apptMap[key]) apptMap[key] = a;
+        });
 
         const map: Record<string, StageData[]> = {};
         (stages || []).forEach((s: any) => {
           if (!map[s.evaluation_id]) map[s.evaluation_id] = [];
+          const appt = apptMap[`${s.evaluation_id}_${s.stage_code}`];
           map[s.evaluation_id].push({
             stage_code: s.stage_code,
             stage_name: s.stage_name,
             status: s.status,
             scheduled_date: s.scheduled_date,
-          });
+            // Extra fields for display
+            ...(s.admin_notes ? { admin_notes: s.admin_notes } : {}),
+            ...(s.version ? { version: s.version } : {}),
+            ...(appt?.scheduled_time ? { scheduled_time: appt.scheduled_time } : {}),
+            ...(appt?.contact_name ? { contact_name: appt.contact_name } : {}),
+            ...(appt?.contact_phone ? { contact_phone: appt.contact_phone } : {}),
+          } as any);
         });
         setJourneyMap(map);
 
@@ -448,6 +471,18 @@ const AdminDashboardPage = () => {
                     scheduleDateValue={scheduleDate[ev.id] || ""}
                     onScheduleDateChange={(val) =>
                       setScheduleDate((p) => ({ ...p, [ev.id]: val }))
+                    }
+                    scheduleTimeValue={scheduleTime[ev.id] || ""}
+                    onScheduleTimeChange={(val) =>
+                      setScheduleTime((p) => ({ ...p, [ev.id]: val }))
+                    }
+                    contactNameValue={contactName[ev.id] || ""}
+                    onContactNameChange={(val) =>
+                      setContactName((p) => ({ ...p, [ev.id]: val }))
+                    }
+                    contactPhoneValue={contactPhone[ev.id] || ""}
+                    onContactPhoneChange={(val) =>
+                      setContactPhone((p) => ({ ...p, [ev.id]: val }))
                     }
                     onRefresh={loadData}
                   />

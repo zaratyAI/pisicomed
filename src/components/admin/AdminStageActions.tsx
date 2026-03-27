@@ -25,6 +25,12 @@ interface AdminStageActionsProps {
   onProposalLinkChange: (value: string) => void;
   scheduleDateValue: string;
   onScheduleDateChange: (value: string) => void;
+  scheduleTimeValue: string;
+  onScheduleTimeChange: (value: string) => void;
+  contactNameValue: string;
+  onContactNameChange: (value: string) => void;
+  contactPhoneValue: string;
+  onContactPhoneChange: (value: string) => void;
   onRefresh: () => Promise<void>;
 }
 
@@ -67,6 +73,12 @@ export function AdminStageActions({
   onProposalLinkChange,
   scheduleDateValue,
   onScheduleDateChange,
+  scheduleTimeValue,
+  onScheduleTimeChange,
+  contactNameValue,
+  onContactNameChange,
+  contactPhoneValue,
+  onContactPhoneChange,
   onRefresh,
 }: AdminStageActionsProps) {
   const [loading, setLoading] = useState<string | null>(null);
@@ -267,8 +279,33 @@ export function AdminStageActions({
       )}
 
       <div className="grid grid-cols-1 gap-3">
+        {/* ─── Stage 1: Diagnóstico — Admin Notes ─── */}
+        {(() => {
+          const stage1 = getStage(1);
+          if (!stage1) return null;
+          return (
+            <StageActionSection title="Etapa 1 — Diagnóstico inicial" stageCode={1}>
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">Anotações do avaliador Med Work</label>
+                <textarea
+                  defaultValue={(stage1 as any).admin_notes || ""}
+                  onBlur={async (e) => {
+                    const val = e.target.value;
+                    await supabase.from("journey_stages").update({ admin_notes: val }).eq("evaluation_id", evaluationId).eq("stage_code", 1);
+                    toast.success("Anotações salvas");
+                  }}
+                  placeholder="Observações, anotações, parecer técnico..."
+                  rows={3}
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none"
+                />
+              </div>
+              {stage1.status === "concluida" && renderRollbackButton(1, "Diagnóstico inicial")}
+            </StageActionSection>
+          );
+        })()}
+
         {/* ─── Stage 2: Proposta ─── */}
-        {quote && (
+        {(() => { const s2 = getStage(2); return s2 ? true : false; })() && (
           <StageActionSection title="Etapa 2 — Orçamento e Proposta" stageCode={2}>
             <div className="flex items-center gap-2">
               <input
@@ -408,13 +445,38 @@ export function AdminStageActions({
     return (
       <StageActionSection title={title} stageCode={stageCode}>
         {(stage.status === "disponivel" || stage.status === "em_andamento") && (
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              value={scheduleDateValue}
-              onChange={(e) => onScheduleDateChange(e.target.value)}
-              className="px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm"
-            />
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <input
+                type="date"
+                value={scheduleDateValue}
+                onChange={(e) => onScheduleDateChange(e.target.value)}
+                className="px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm"
+              />
+              <input
+                type="time"
+                value={scheduleTimeValue}
+                onChange={(e) => onScheduleTimeChange(e.target.value)}
+                className="px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm"
+                placeholder="Horário"
+              />
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <input
+                type="text"
+                value={contactNameValue}
+                onChange={(e) => onContactNameChange(e.target.value)}
+                placeholder="Nome do contato"
+                className="flex-1 min-w-[140px] px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm"
+              />
+              <input
+                type="text"
+                value={contactPhoneValue}
+                onChange={(e) => onContactPhoneChange(e.target.value)}
+                placeholder="Telefone do contato"
+                className="flex-1 min-w-[140px] px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm"
+              />
+            </div>
             <ActionButton
               label="Agendar"
               icon={<CalendarDays className="w-3.5 h-3.5" />}
@@ -422,15 +484,24 @@ export function AdminStageActions({
               onClick={() =>
                 confirmAndExecute(
                   `schedule_${stageCode}`,
-                  `Agendar etapa ${stageCode} para ${scheduleDateValue}`,
-                  (notes) =>
-                    handleScheduleAppointment(
-                      evaluationId,
-                      stageCode,
-                      scheduleDateValue,
-                      "admin",
-                      notes || undefined
-                    )
+                  `Agendar etapa ${stageCode} para ${scheduleDateValue}${scheduleTimeValue ? ` às ${scheduleTimeValue}` : ""}`,
+                  async (notes) => {
+                    const fullNotes = [
+                      notes,
+                      scheduleTimeValue ? `Horário: ${scheduleTimeValue}` : "",
+                      contactNameValue ? `Contato: ${contactNameValue}` : "",
+                      contactPhoneValue ? `Telefone: ${contactPhoneValue}` : "",
+                    ].filter(Boolean).join(" | ");
+                    await handleScheduleAppointment(evaluationId, stageCode, scheduleDateValue, "admin", fullNotes || undefined);
+                    // Save extra fields directly to appointment
+                    if (scheduleTimeValue || contactNameValue || contactPhoneValue) {
+                      await supabase.from("appointments").update({
+                        scheduled_time: scheduleTimeValue || null,
+                        contact_name: contactNameValue || null,
+                        contact_phone: contactPhoneValue || null,
+                      }).eq("evaluation_id", evaluationId).eq("stage_code", stageCode).eq("status", "agendado");
+                    }
+                  }
                 )
               }
               disabled={!scheduleDateValue}
@@ -443,6 +514,12 @@ export function AdminStageActions({
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <Clock className="w-3 h-3" />
                 Agendado: {new Date(stage.scheduled_date + "T00:00:00").toLocaleDateString("pt-BR")}
+                {(stage as any).scheduled_time ? ` às ${(stage as any).scheduled_time}` : ""}
+              </span>
+            )}
+            {(stage as any).contact_name && (
+              <span className="text-xs text-muted-foreground">
+                | Contato: {(stage as any).contact_name} {(stage as any).contact_phone ? `(${(stage as any).contact_phone})` : ""}
               </span>
             )}
             <ActionButton
