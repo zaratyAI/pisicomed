@@ -305,7 +305,7 @@ export function AdminStageActions({
         })()}
 
         {/* ─── Stage 2: Proposta ─── */}
-        {(() => { const s2 = getStage(2); return s2 ? true : false; })() && (
+        {getStage(2) && (
           <StageActionSection title="Etapa 2 — Orçamento e Proposta" stageCode={2}>
             <div className="flex items-center gap-2">
               <input
@@ -328,7 +328,7 @@ export function AdminStageActions({
               />
             </div>
 
-            {(quote as any).proposal_link && (
+            {quote?.proposal_link && (
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-xs font-medium text-muted-foreground">Status:</span>
                 {quote.proposal_status !== "approved" && quote.proposal_status !== "rejected" && (
