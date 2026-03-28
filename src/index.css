@@ -48,6 +48,48 @@
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
+
+  .dark {
+    --background: 220 20% 8%;
+    --foreground: 210 20% 92%;
+
+    --card: 220 18% 11%;
+    --card-foreground: 210 20% 92%;
+
+    --popover: 220 18% 11%;
+    --popover-foreground: 210 20% 92%;
+
+    --primary: 193 67% 42%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 146 51% 36%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 220 15% 16%;
+    --muted-foreground: 215 14% 60%;
+
+    --accent: 193 50% 30%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 20%;
+    --input: 220 15% 20%;
+    --ring: 193 67% 42%;
+
+    --success: 146 40% 40%;
+    --success-foreground: 0 0% 100%;
+
+    --sidebar-background: 220 18% 10%;
+    --sidebar-foreground: 210 20% 85%;
+    --sidebar-primary: 210 20% 92%;
+    --sidebar-primary-foreground: 220 18% 10%;
+    --sidebar-accent: 220 15% 16%;
+    --sidebar-accent-foreground: 210 20% 85%;
+    --sidebar-border: 220 15% 18%;
+    --sidebar-ring: 193 67% 42%;
+  }
 }
 
 @layer base {

@@ -14,8 +14,9 @@ import { CaseListItem } from "@/components/admin/CaseListItem";
 import { DashboardFilters, FilterState } from "@/components/admin/DashboardFilters";
 import { DashboardStats } from "@/components/admin/DashboardStats";
 import logo from "@/assets/logo-medwork.png";
-import { LogOut, Loader2, FileText, Settings2, Trash2, BarChart3, Mail } from "lucide-react";
+import { LogOut, Loader2, FileText, Settings2, Trash2, BarChart3, Mail, Sun, Moon } from "lucide-react";
 import { toast } from "sonner";
+import { useTheme } from "next-themes";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +32,7 @@ import { sendAdminReport } from "@/utils/pipeline";
 const AdminDashboardPage = () => {
   const navigate = useNavigate();
   const { logout, hasPermission, profile, roles } = useAdminAuth();
+  const { theme, setTheme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [evaluations, setEvaluations] = useState<any[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -390,6 +392,13 @@ const AdminDashboardPage = () => {
           >
             <BarChart3 className="w-4 h-4" />
             <span className="hidden sm:inline">Gerencial</span>
+          </button>
+          <button
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            title={theme === "dark" ? "Modo claro" : "Modo escuro"}
+          >
+            {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
           {profile && (
             <div className="text-right hidden sm:block">

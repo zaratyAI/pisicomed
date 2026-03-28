@@ -7,8 +7,9 @@ import { computeAnalytics, getPipelineLabel } from "@/utils/analytics";
 import logo from "@/assets/logo-medwork.png";
 import {
   LogOut, Loader2, BarChart3, TrendingUp, Clock, AlertTriangle,
-  ArrowLeft, Users, Building2, Activity, Target, XCircle
+  ArrowLeft, Users, Building2, Activity, Target, XCircle, Sun, Moon
 } from "lucide-react";
+import { useTheme } from "next-themes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
@@ -41,6 +42,7 @@ const COLORS = [
 const AnalyticsDashboardPage = () => {
   const navigate = useNavigate();
   const { logout, profile, roles } = useAdminAuth();
+  const { theme, setTheme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [evaluations, setEvaluations] = useState<any[]>([]);
   const [journeyMap, setJourneyMap] = useState<Record<string, any[]>>({});
