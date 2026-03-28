@@ -316,6 +316,48 @@ export async function logStageChange(params: {
   if (error) console.error("Audit log error:", error);
 }
 
+// ─── Email actions via Edge Function ───
+
+export async function sendActionPlanEmail(
+  evaluationId: string,
+  recipientEmail?: string,
+  customMessage?: string
+): Promise<{ success: boolean; sent_to?: string }> {
+  const { data, error } = await supabase.functions.invoke("send-email", {
+    body: {
+      action: "send_action_plan",
+      evaluation_id: evaluationId,
+      recipient_email: recipientEmail,
+      custom_message: customMessage,
+    },
+  });
+  if (error) throw new Error(error.message || "Erro ao enviar email");
+  if (data && !data.success) throw new Error(data.error || "Erro no envio");
+  return data;
+}
+
+export async function sendAdminReport(
+  evaluationId: string,
+  recipientEmail: string,
+  ccEmails?: string,
+  subject?: string,
+  customMessage?: string
+): Promise<{ success: boolean; sent_to?: string }> {
+  const { data, error } = await supabase.functions.invoke("send-email", {
+    body: {
+      action: "send_admin_report",
+      evaluation_id: evaluationId,
+      recipient_email: recipientEmail,
+      cc_emails: ccEmails,
+      subject,
+      custom_message: customMessage,
+    },
+  });
+  if (error) throw new Error(error.message || "Erro ao enviar email");
+  if (data && !data.success) throw new Error(data.error || "Erro no envio");
+  return data;
+}
+
 export async function getAuditHistory(evaluationId: string) {
   const { data, error } = await supabase
     .from("stage_audit_logs")

@@ -14,7 +14,8 @@ import { CaseListItem } from "@/components/admin/CaseListItem";
 import { DashboardFilters, FilterState } from "@/components/admin/DashboardFilters";
 import { DashboardStats } from "@/components/admin/DashboardStats";
 import logo from "@/assets/logo-medwork.png";
-import { LogOut, Loader2, FileText, Settings2, Trash2, BarChart3 } from "lucide-react";
+import { LogOut, Loader2, FileText, Settings2, Trash2, BarChart3, Mail } from "lucide-react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { formatCNPJ } from "@/utils/cnpj";
 import { exportActionPlanPDF } from "@/utils/pdfExport";
+import { sendAdminReport } from "@/utils/pipeline";
 
 const AdminDashboardPage = () => {
   const navigate = useNavigate();
@@ -42,6 +44,11 @@ const AdminDashboardPage = () => {
   const [contactName, setContactName] = useState<Record<string, string>>({});
   const [contactPhone, setContactPhone] = useState<Record<string, string>>({});
   const [proposalLinks, setProposalLinks] = useState<Record<string, string>>({});
+  const [emailModal, setEmailModal] = useState<{ open: boolean; evalId: string; companyName: string }>({ open: false, evalId: "", companyName: "" });
+  const [emailTo, setEmailTo] = useState("");
+  const [emailCc, setEmailCc] = useState("");
+  const [emailMessage, setEmailMessage] = useState("");
+  const [emailSending, setEmailSending] = useState(false);
   const [filters, setFilters] = useState<FilterState>({
     search: "",
     stageFilter: "",
@@ -334,6 +341,30 @@ const AdminDashboardPage = () => {
     exportActionPlanPDF(companyData, actionItems, date, evaluatorData);
   };
 
+  // ─── Email ───
+  const openEmailModal = (ev: any) => {
+    const company = ev.companies;
+    const evaluator = ev.evaluators;
+    setEmailModal({ open: true, evalId: ev.id, companyName: company?.legal_name || "" });
+    setEmailTo(evaluator?.email || "");
+    setEmailCc("");
+    setEmailMessage("");
+  };
+
+  const handleSendEmail = async () => {
+    if (!emailTo.trim()) return;
+    setEmailSending(true);
+    try {
+      await sendAdminReport(emailModal.evalId, emailTo, emailCc || undefined, undefined, emailMessage || undefined);
+      toast.success(`Email enviado para ${emailTo}`);
+      setEmailModal({ open: false, evalId: "", companyName: "" });
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao enviar email");
+    } finally {
+      setEmailSending(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -420,6 +451,7 @@ const AdminDashboardPage = () => {
                     setExpandedId(expandedId === ev.id ? null : ev.id)
                   }
                   onDownloadPDF={() => handleDownloadPDF(ev)}
+                  onSendEmail={() => openEmailModal(ev)}
                   onDelete={() => openDeleteModal(ev)}
                 >
                   {/* Next action banner */}
@@ -523,6 +555,74 @@ const AdminDashboardPage = () => {
           </div>
         )}
       </main>
+
+      {/* Email modal */}
+      <Dialog
+        open={emailModal.open}
+        onOpenChange={(open) => {
+          if (!open) setEmailModal({ open: false, evalId: "", companyName: "" });
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Enviar relatório por email</DialogTitle>
+            <DialogDescription>
+              {emailModal.companyName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <label className="text-sm font-medium text-foreground">Para (email principal)</label>
+              <input
+                type="email"
+                value={emailTo}
+                onChange={(e) => setEmailTo(e.target.value)}
+                placeholder="email@empresa.com"
+                className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground">CC (opcional, separar por vírgula)</label>
+              <input
+                type="text"
+                value={emailCc}
+                onChange={(e) => setEmailCc(e.target.value)}
+                placeholder="copia1@empresa.com, copia2@empresa.com"
+                className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground">Mensagem personalizada (opcional)</label>
+              <textarea
+                value={emailMessage}
+                onChange={(e) => setEmailMessage(e.target.value)}
+                placeholder="Prezado(a), segue o relatório de diagnóstico..."
+                rows={3}
+                className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              O email incluirá o relatório completo com plano de ação e aviso de resguardo jurídico, enviado de psicossociais@medwork-to.com.br
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <button
+              onClick={() => setEmailModal({ open: false, evalId: "", companyName: "" })}
+              className="px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSendEmail}
+              disabled={emailSending || !emailTo.trim()}
+              className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center gap-2"
+            >
+              {emailSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+              Enviar relatório
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete modal */}
       <Dialog

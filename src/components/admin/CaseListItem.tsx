@@ -1,4 +1,4 @@
-import { Building2, User, Calendar, ChevronDown, ChevronUp, Download, MoreVertical, Trash2 } from "lucide-react";
+import { Building2, User, Calendar, ChevronDown, ChevronUp, Download, MoreVertical, Trash2, Mail } from "lucide-react";
 import { PipelineBadge } from "@/components/shared/PipelineBadge";
 import { CaseAlertBadges } from "@/components/admin/CaseAlertBadges";
 import { PipelineStatus } from "@/utils/pipeline";
@@ -20,6 +20,7 @@ interface CaseListItemProps {
   isExpanded: boolean;
   onToggle: () => void;
   onDownloadPDF: () => void;
+  onSendEmail: () => void;
   onDelete: () => void;
   children?: React.ReactNode;
 }
@@ -32,6 +33,7 @@ export function CaseListItem({
   isExpanded,
   onToggle,
   onDownloadPDF,
+  onSendEmail,
   onDelete,
   children,
 }: CaseListItemProps) {
@@ -96,6 +98,17 @@ export function CaseListItem({
                 className="flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:brightness-110 active:scale-[0.98] transition-all"
               >
                 <Download className="w-3.5 h-3.5" /> PDF
+              </button>
+            )}
+            {isCompleted && canExport && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSendEmail();
+                }}
+                className="flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 active:scale-[0.98] transition-all"
+              >
+                <Mail className="w-3.5 h-3.5" /> Email
               </button>
             )}
             {canDelete && (
